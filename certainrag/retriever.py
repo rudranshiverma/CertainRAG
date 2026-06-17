@@ -1,10 +1,10 @@
-from sentence_transformers import SentenceTransformers
+from sentence_transformers import SentenceTransformer
 import faiss
 import numpy
 
 class Retriever:
     def __init__(self, model_name="all-MiniLM-L6-v2"):
-        self.model=SentenceTransformers(model_name)
+        self.model=SentenceTransformer(model_name)
         self.index=None
         self.chunks=[]
     def index_documents(self,chunks:list[str]):
