@@ -16,9 +16,9 @@ class CertainRAG:
         self,
         faithfulness_model:str="cross-encoder/nli-deberta-v3-base",
         weights:tuple=(0.33, 0.33, 0.34),
-        threshold:float=0.5,**kwargs):
+        threshold:float=0.5, fast_mode:bool=False, **kwargs):
         self._faithfulness=FaithfulnessSignal(model_name=faithfulness_model)
-        self._entropy=SemanticEntropySignal(model_name=faithfulness_model)
+        self._entropy=SemanticEntropySignal(model_name=faithfulness_model,fast_mode=fast_mode)
         self._retrieval=RetrievalConfidenceSignal()
         self._scorer=CompositeScorer(weights=weights, threshold=threshold)
 
