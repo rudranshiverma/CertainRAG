@@ -1,29 +1,67 @@
-from certainrag.semantic_entropy import SemanticEntropyScorer
+import pytest
+from certainrag.signals.semantic_entropy import SemanticEntropySignal
+from certainrag.exceptions import InputValidationError
 
-scorer=SemanticEntropyScorer()
+signal = SemanticEntropySignal()
 
-#test 1- high entropy
-chunks_high=[
-        "Atrial fibrillation is caused by disorganized electrical signals in the heart's upper chambers.",
-        "Risk factors for atrial fibrillation include high blood pressure and heart disease.",
-]
-query_high_entropy = "Can arm pain be a sign of heart attack?"
-result_high_entropy = scorer.score(query_high_entropy, chunks_high)
-print("=== Test 1: High Entropy ===")
-print(f"Semantic Entropy: {result_high_entropy['semantic_entropy']:.4f}")
-print(f"Mean Similarity: {result_high_entropy['mean_similarity']:.4f}")
-print()
+def test_low_entropy():
+    #All responses paraphrase the same meaning - should collapse to ~1 cluster
+    responses = [
+        "Photosynthesis converts sunlight into glucose in plants.",
+        "Plants use sunlight to produce glucose through photosynthesis.",
+        "Through photosynthesis, plants make glucose using light energy.",
+        "Sunlight is converted to glucose by plants via photosynthesis.",
+        "Plants synthesize glucose from sunlight through photosynthesis."
+    ]
+    result=signal.compute(responses)
+    print(f"\nLOW ENTROPY TEST — entropy: {result['semantic_entropy']:.4f}, clusters: {result['n_clusters']}, sizes: {result['cluster_sizes']}")
+    assert result["n_clusters"]<=2
+    assert result["semantic_entropy"]<0.4
 
-#test 2- low entropy
-chunks_low=[
-        "Photosynthesis allows green plants to convert sunlight into chemical energy stored in glucose. Chlorophyll inside the leaves absorbs sunlight and plays a major role in photosynthesis. During photosynthesis, plants take in carbon dioxide and release oxygen into the atmosphere.",
-        "Plant diseases can spread rapidly through infected soil, water, or air.",
-        "Yellowing leaves and stunted growth are common symptoms of diseased plants",
-        "Wilting leaves even when the soil has enough water can indicate disease. Brown or black spots on leaves are common symptoms of fungal infections."
-]
-query_low_entropy="What are the symptoms of plant diseases?"
-result_low_entropy=scorer.score(query_low_entropy, chunks_low)
-print("=== Test 2: Low Entropy Answer ===")
-print(f"Semantic Entropy: {result_low_entropy['semantic_entropy']:.4f}")
-print(f"Mean Similarity: {result_low_entropy['mean_similarity']}")
-print()
+def test_high_entropy():
+    #Responses with genuinely different, non-entailing claims.
+    responses = [
+        "Photosynthesis converts sunlight into glucose in plant cells.",
+        "I don't have enough information to answer this question.",
+        "The mitochondria is the powerhouse of the cell.",
+        "This question is about quantum mechanics and entanglement.",
+        "Plants need water and minerals from soil to grow tall."
+    ]
+    result=signal.compute(responses)
+    print(f"\nHIGH ENTROPY TEST — entropy: {result['semantic_entropy']:.4f}, clusters: {result['n_clusters']}, sizes: {result['cluster_sizes']}")
+    assert result["n_clusters"] >= 3
+    assert result["n_clusters"] >= 3
+    assert result["semantic_entropy"] > 0.5
+
+def test_single_response_raises():
+    with pytest.raises(InputValidationError):
+        signal.compute(["only one response"])
+
+def test_empty_list_raises():
+    with pytest.raises(InputValidationError):
+        signal.compute([])
+
+def test_empty_strings_raises():
+    with pytest.raises(InputValidationError):
+        signal.compute(["", "   ", ""])
+
+def test_cluster_sizes_sum_to_n():
+    responses = [
+        "The sky is blue during the day.",
+        "Daytime skies appear blue.",
+        "Grass is green in most climates."
+    ]
+    result=signal.compute(responses)
+    assert sum(result["cluster_sizes"]) == len(responses)
+
+def test_output_has_required_fields():
+    responses= [
+        "Water boils at 100 degrees Celsius at sea level.",
+        "At sea level, water reaches boiling point at 100°C."
+    ]
+    result=signal.compute(responses)
+    assert "semantic_entropy" in result
+    assert "n_clusters" in result
+    assert "cluster_sizes" in result
+    assert "clusters" in result
+    assert 0.0 <= result["semantic_entropy"]<=1.0
