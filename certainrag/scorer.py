@@ -40,9 +40,10 @@ class CompositeScorer:
             if not 0.0<=float(val)<=1.0:
                 raise InputValidationError(f"{name} must be between 0 and 1, got {val}")
         try:
-            uncertainty=(round(float(self.w_retrieval*(1-retrieval_confidence)+
+            uncertainty=round(float(
+                self.w_retrieval*(1-retrieval_confidence)+
             self.w_faith*(1-faithfulness_score)+
-            self.w_entropy*semantic_entropy)),4)
+            self.w_entropy*semantic_entropy),4)
         except Exception as e:
             raise ComputationError(f"Composite score computation failed: {e}")
         if uncertainty<self.low_threshold:
