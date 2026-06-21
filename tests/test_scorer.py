@@ -1,50 +1,78 @@
-from certainrag.scorer import CompositeScorer
+import pytest
+from certainrag.scorer import CompositeScorer, UncertaintyResult
+from certainrag.exceptions import InputValidationError
 
-scorer = CompositeScorer()
+def test_low_uncertainty():
+    scorer=CompositeScorer()
+    result=scorer.score(
+        retrieval_confidence=0.90,
+        faithfulness_score=0.88,
+        semantic_entropy=0.04,
+        supporting_chunks=["chunk1"],
+        contradicting_chunks=[],
+        latency_ms=1200.0
+    )
+    assert result.uncertainty_level=="LOW"
+    assert result.should_abstain==False
+    assert isinstance(result,UncertaintyResult)
 
-#test 1-all signals confident, should be LOW uncertainty
-result_low=scorer.score(
-    retrieval_confidence=0.85,
-    faithfulness_score=0.90,
-    semantic_entropy=0.05,
-    supporting_chunks=["chunk1", "chunk2"],
-    contradicting_chunks=[],
-    latency_ms=1200.0
-)
-print("=== Test 1: Low Uncertainty ===")
-print(f"Uncertainty Score: {result_low.uncertainty_score}")
-print(f"Uncertainty Level: {result_low.uncertainty_level}")
-print(f"Should Abstain: {result_low.should_abstain}")
-print(f"Explanation: {result_low.explanation}")
-print()
+def test_high_uncertainty():
+    scorer=CompositeScorer()
+    result=scorer.score(
+        retrieval_confidence=0.20,
+        faithfulness_score=0.15,
+        semantic_entropy=0.70,
+        supporting_chunks=[],
+        contradicting_chunks=["chunk1"],
+        latency_ms=1500.0
+    )
+    assert result.uncertainty_level=="HIGH"
+    assert result.should_abstain==True
 
-#test 2 — all signals uncertain, should be HIGH uncertainty
-result_high=scorer.score(
-    retrieval_confidence=0.21,
-    faithfulness_score=0.15,
-    semantic_entropy=0.42,
-    supporting_chunks=[],
-    contradicting_chunks=["chunk1"],
-    latency_ms=1500.0
-)
-print("=== Test 2: High Uncertainty ===")
-print(f"Uncertainty Score: {result_high.uncertainty_score}")
-print(f"Uncertainty Level: {result_high.uncertainty_level}")
-print(f"Should Abstain: {result_high.should_abstain}")
-print(f"Explanation: {result_high.explanation}")
-print()
+def test_medium_uncertainty():
+    scorer=CompositeScorer()
+    result=scorer.score(
+        retrieval_confidence=0.65,
+        faithfulness_score=0.45,
+        semantic_entropy=0.20,
+        supporting_chunks=["chunk1"],
+        contradicting_chunks=["chunk2"],
+        latency_ms=1300.0
+    )
+    assert result.uncertainty_level=="MEDIUM"
 
-#test 2- mixed signals, should be MEDIUM
-result_medium = scorer.score(
-    retrieval_confidence=0.75,
-    faithfulness_score=0.35,
-    semantic_entropy=0.18,
-    supporting_chunks=["chunk1"],
-    contradicting_chunks=["chunk2"],
-    latency_ms=1300.0
-)
-print("=== Test 3: Mixed Signals ===")
-print(f"Uncertainty Score: {result_medium.uncertainty_score}")
-print(f"Uncertainty Level: {result_medium.uncertainty_level}")
-print(f"Should Abstain: {result_medium.should_abstain}")
-print(f"Explanation: {result_medium.explanation}")
+def test_invalid_weights():
+    with pytest.raises(InputValidationError):
+        CompositeScorer(weights=(0.5, 0.5, 0.5))
+
+def test_invalid_threshold():
+    with pytest.raises(InputValidationError):
+        CompositeScorer(threshold=1.5)
+
+def test_score_out_of_range():
+    scorer=CompositeScorer()
+    with pytest.raises(InputValidationError):
+        scorer.score(
+            retrieval_confidence=1.5,
+            faithfulness_score=0.8,
+            semantic_entropy=0.1,
+            supporting_chunks=[],
+            contradicting_chunks=[],
+            latency_ms=100.0
+        )
+
+def test_result_fields_present():
+    scorer=CompositeScorer()
+    result=scorer.score(
+        retrieval_confidence=0.7,
+        faithfulness_score=0.7,
+        semantic_entropy=0.1,
+        supporting_chunks=[],
+        contradicting_chunks=[],
+        latency_ms=500.0
+    )
+    assert hasattr(result,"uncertainty_score")
+    assert hasattr(result,"uncertainty_level")
+    assert hasattr(result,"should_abstain")
+    assert hasattr(result,"signal_breakdown")
+    assert hasattr(result,"explanation")
