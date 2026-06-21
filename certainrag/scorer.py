@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional
+from certainrag.exceptions import InputValidationError, ComputationError
 
 @dataclass
 class UncertaintyResult:
@@ -16,29 +16,45 @@ class UncertaintyResult:
     latency_ms:float
 
 class CompositeScorer:
-    def __init__(self, weights=(0.33,0.33,0.34), threshold=0.5):
+    def __init__(self, weights:tuple=(0.33,0.33,0.34), threshold:float=0.5, low_threshold:float=0.35,high_threshold:float=0.65):
+        if len(weights)!=3:
+            raise InputValidationError("weights must be a tuple of 3 values: (retrieval_weight, faithfulness_weight, entropy_weight)")
+        if not (0.99<=sum(weights)<=1.01):
+            raise InputValidationError(f"weights must sum to 1.0, got {sum(weights):.3f}")
+        if not 0.0<=threshold<=1.0:
+            raise InputValidationError(f"threshold must be between 0 and 1, got {threshold}")
         self.w_retrieval,self.w_faith,self.w_entropy=weights
         self.threshold=threshold
+        self.low_threshold=low_threshold
+        self.high_threshold=high_threshold
     def score(self,
               retrieval_confidence:float,faithfulness_score:float,semantic_entropy:float,
               supporting_chunks:list, contradicting_chunks:list, latency_ms:float)->UncertaintyResult:
         
         # higher uncertainty happens with low retrieval confidence, low faithfulness and high entropy
-        uncertainty=(
-            self.w_retrieval*(1-retrieval_confidence)+
+        for name,val in [
+            ("retrieval_confidence", retrieval_confidence),
+            ("faithfulness_score", faithfulness_score),
+            ("semantic_entropy", semantic_entropy)
+        ]:
+            if not 0.0<=float(val)<=1.0:
+                raise InputValidationError(f"{name} must be between 0 and 1, got {val}")
+        try:
+            uncertainty=(round(float(self.w_retrieval*(1-retrieval_confidence)+
             self.w_faith*(1-faithfulness_score)+
-            self.w_entropy*semantic_entropy
-        )
-        if uncertainty<0.35:
+            self.w_entropy*semantic_entropy)),4)
+        except Exception as e:
+            raise ComputationError(f"Composite score computation failed: {e}")
+        if uncertainty<self.low_threshold:
             level="LOW"
-        elif uncertainty<0.65:
+        elif uncertainty<self.high_threshold:
             level="MEDIUM"
         else:
             level="HIGH"
         should_abstain=uncertainty>=self.threshold
-        explanation=self._generate_explanation(retrieval_confidence,faithfulness_score,semantic_entropy,supporting_chunks,contradicting_chunks)
+        explanation=self._explain(retrieval_confidence,faithfulness_score,semantic_entropy,contradicting_chunks)
         return UncertaintyResult(
-            uncertainty_score=round(uncertainty,4),
+            uncertainty_score=uncertainty,
             uncertainty_level=level,
             should_abstain=should_abstain,
             retrieval_confidence=round(retrieval_confidence,4),
@@ -57,9 +73,9 @@ class CompositeScorer:
             supporting_chunks=supporting_chunks,
             contradicting_chunks=contradicting_chunks,
             explanation=explanation,
-            latency_ms=latency_ms
+            latency_ms=round(float(latency_ms),2)
         )
-    def _generate_explanation(self,ret,faith,entropy,supporting,contradicting):
+    def _explain(self,ret,faith,entropy,contradicting):
         parts=[]
         if ret<0.4:
             parts.append("Retrieved context was weakly relevant")
@@ -69,4 +85,4 @@ class CompositeScorer:
             parts.append("Model gave inconsistent answers across samples")
         if not parts:
             return "Answer appears well supported by retrieved context"
-        return "Flagged because: " + " ".join(parts)
+        return "Flagged because: " + ", ".join(parts)
