@@ -61,7 +61,7 @@ class SemanticEntropySignal:
                     assigned[j]=True
             clusters.append(cluster)
         return clusters
-    def compute_entropy(self,responses:list[str])->dict:
+    def _compute_entropy(self,responses:list[str])->dict:
         self._load_nli_model()
         clusters=self._cluster_by_entailment(responses)
         n=len(responses)
@@ -122,7 +122,7 @@ class SemanticEntropySignal:
             if self.fast_mode:
                 return self._compute_embedding_dispersion(cleaned)
             else:
-                return self._compute_true_entropy(cleaned)
+                return self._compute_entropy(cleaned)
         except (ComputationError, ModelLoadError):
             raise
         except Exception as e:
