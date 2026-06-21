@@ -27,18 +27,25 @@ class CompositeScorer:
         self.threshold=threshold
         self.low_threshold=low_threshold
         self.high_threshold=high_threshold
+    def _clip_float_drift(self, value: float, name: str) -> float:
+        #Corrects floating point precision drift while still catching genuine out-of-range errors.
+        value=float(value)
+        epsilon=1e-9
+        if -epsilon<=value<0.0:
+            return 0.0
+        if 1.0<value<=1.0+epsilon:
+            return 1.0
+        if not 0.0<=value<=1.0:
+            raise InputValidationError(f"{name} must be between 0 and 1, got {value}")
+        return value
     def score(self,
               retrieval_confidence:float,faithfulness_score:float,semantic_entropy:float,
               supporting_chunks:list, contradicting_chunks:list, latency_ms:float)->UncertaintyResult:
         
         # higher uncertainty happens with low retrieval confidence, low faithfulness and high entropy
-        for name,val in [
-            ("retrieval_confidence", retrieval_confidence),
-            ("faithfulness_score", faithfulness_score),
-            ("semantic_entropy", semantic_entropy)
-        ]:
-            if not 0.0<=float(val)<=1.0:
-                raise InputValidationError(f"{name} must be between 0 and 1, got {val}")
+        retrieval_confidence=self._clip_float_drift(retrieval_confidence, "retrieval_confidence")
+        faithfulness_score=self._clip_float_drift(faithfulness_score, "faithfulness_score")
+        semantic_entropy=self._clip_float_drift(semantic_entropy, "semantic_entropy")
         try:
             uncertainty=round(float(
                 self.w_retrieval*(1-retrieval_confidence)+
