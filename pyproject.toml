@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "certainrag"
+version = "0.1.0"
+description = "Runtime uncertainty quantification for RAG pipelines"
+requires-python = ">=3.9"
+dependencies = [
+    "numpy",
+    "transformers",
+    "torch",
+    "sentence-transformers"
+]
+
+[tool.setuptools.packages.find]
+include = ["certainrag*"]
