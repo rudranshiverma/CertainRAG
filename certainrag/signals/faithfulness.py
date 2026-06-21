@@ -18,7 +18,7 @@ class FaithfulnessSignal:
             self._pipeline=pipeline("text-classification",model=self.model_name,top_k=None)
         except Exception as e:
             raise ModelLoadError(
-                f"Failed to load NLI model '{self.model_name}. "
+                f"Failed to load NLI model '{self.model_name}'. "
                 f"Ensure transformers is installed and model is accessible. "
                 f"Error: {e}"
             )

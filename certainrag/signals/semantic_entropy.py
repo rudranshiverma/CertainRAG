@@ -10,7 +10,7 @@ fast but it's an approximation, not true entropy.
 This signal requires pre-generated responses which the developer must generate using their own LLM and pass them here.
 """
 class SemanticEntropySignal:
-    def __init__(self, nli_pipeline=None, model_name:str="cross-encoder/nli-deberta-v3-base", embedding_model_name:str="cross-encoder/nli-deberta-v3-base", fast_mode:bool=False):
+    def __init__(self, nli_pipeline=None, model_name:str="cross-encoder/nli-deberta-v3-base", embedding_model_name:str="sentence-transformers/all-MiniLM-L6-v2", fast_mode:bool=False):
         self.model_name=model_name
         self.embedding_model_name=embedding_model_name
         self.fast_mode=fast_mode
@@ -93,7 +93,8 @@ class SemanticEntropySignal:
             for j in range(i+1,n)
         ]
         mean_similarity=float(np.mean(upper_triangle))
-        dispersion=float(1.0-mean_similarity)
+        mean_similarity=np.clip(mean_similarity,0.0,1.0)
+        dispersion=np.clip(1.0-mean_similarity,0.0,1.0)
         return{
             "semantic_entropy":dispersion,
             "mean_similarity":mean_similarity,
