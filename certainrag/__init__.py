@@ -19,13 +19,11 @@ class CertainRAG:
         weights:tuple=(0.33, 0.33, 0.34),
         threshold:float=0.5, fast_mode:bool=False, **kwargs):
         self._faithfulness=FaithfulnessSignal(model_name=faithfulness_model)
-        self._entropy=SemanticEntropySignal(model_name=faithfulness_model,fast_mode=fast_mode)
+        self._entropy=SemanticEntropySignal(model_name=faithfulness_model,embedding_model_name=embedding_model,fast_mode=fast_mode)
         self._retrieval=RetrievalConfidenceSignal()
         self._scorer=CompositeScorer(weights=weights, threshold=threshold)
 
-    def evaluate(self,query:str,answer:str,context_chunks:list[str],retrieval_scores:list[float],responses:Optional[list[str]]=None) -> UncertaintyResult:
-        if not query or not query.strip():
-            raise InputValidationError("query cannot be empty.")
+    def evaluate(self,answer:str,context_chunks:list[str],retrieval_scores:list[float],responses:Optional[list[str]]=None) -> UncertaintyResult:
         start=time.time()
 
         # Signal 1- retrieval confidence
@@ -36,7 +34,8 @@ class CertainRAG:
 
         # Signal 3- semantic entropy (optional)
         if responses is not None:
-            self._entropy._pipeline =self._faithfulness.get_pipeline()
+            if not self._entropy.fast_mode:
+                self._entropy._nli_pipeline =self._faithfulness.get_pipeline()
             entropy_result=self._entropy.compute(responses)
             semantic_entropy=entropy_result["semantic_entropy"]
         else:
@@ -54,5 +53,5 @@ class CertainRAG:
         )
 
     def evaluate_entropy_only(self,responses: list[str])->dict:
-        self._entropy._pipeline=self._faithfulness.get_pipeline()
+        self._entropy._nli_pipeline=self._faithfulness.get_pipeline()
         return self._entropy.compute(responses)
