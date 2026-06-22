@@ -45,7 +45,6 @@ def test_evaluate_without_responses():
     # Developer uses CertainRAG as pure evaluator
     rag=CertainRAG()
     result=rag.evaluate(
-        query=query,
         answer=answer,
         context_chunks=context_chunks,
         retrieval_scores=retrieval_scores
@@ -74,7 +73,6 @@ def test_evaluate_with_responses():
 
     rag=CertainRAG()
     result=rag.evaluate(
-        query=query,
         answer=answer,
         context_chunks=context_chunks,
         retrieval_scores=retrieval_scores,
@@ -82,3 +80,7 @@ def test_evaluate_with_responses():
     )
     assert result.uncertainty_level in {"LOW", "MEDIUM", "HIGH"}
     assert result.semantic_entropy != 0.5  # was actually computed
+def test_fast_mode_uses_custom_embedding_model():
+    rag = CertainRAG(fast_mode=True, embedding_model="sentence-transformers/all-MiniLM-L6-v2")
+    assert rag._entropy.embedding_model_name == "sentence-transformers/all-MiniLM-L6-v2"
+    assert rag._entropy.fast_mode == True
