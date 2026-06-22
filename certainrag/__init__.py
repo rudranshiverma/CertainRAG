@@ -15,6 +15,7 @@ class CertainRAG:
     def __init__(
         self,
         faithfulness_model:str="cross-encoder/nli-deberta-v3-base",
+        embedding_model:str="sentence-transformers/all-MiniLM-L6-v2",
         weights:tuple=(0.33, 0.33, 0.34),
         threshold:float=0.5, fast_mode:bool=False, **kwargs):
         self._faithfulness=FaithfulnessSignal(model_name=faithfulness_model)
