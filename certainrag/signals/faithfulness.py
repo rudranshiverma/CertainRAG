@@ -1,80 +1,55 @@
 import re
-import numpy as np
-from certainrag.exceptions import (InputValidationError, ModelLoadError, ComputationError)
+from ..exceptions import BackendError, ConfigurationError
 
-#measures if the generated answer is supported by the retrieved context using NLI model DeBERTa
+SCORE_PATTERN = re.compile(r"SCORE:\s*(\d*\.?\d+)", re.IGNORECASE)
+
+JUDGE_PROMPT = """You are checking whether an answer is faithful to its source context.
+
+Context:
+{context}
+
+Question: {question}
+
+Answer: {answer}
+
+Step 1: State the answer's core claim in one sentence (its yes/no/maybe direction and the specific facts/numbers it relies on).
+
+Step 2: Check that core claim directly against the context. Does the context support that exact direction and those exact facts, or does it support the \
+opposite, a different number, or something not mentioned at all?
+
+Step 3: Score using these anchors, based only on what Step 2 found:
+- 0.9-1.0: the core claim and its specific facts are explicitly supported by the context
+- 0.5-0.7: the core claim is a reasonable inference, but not explicitly stated
+- 0.0-0.3: the core claim, its direction, or a specific fact CONTRADICTS the context, or is fabricated and not present in the context at all
+
+Do not default to a middle score. A flipped direction (yes vs no, increases vs decreases) or a changed number is a contradiction and must score 0.0-0.3, even \
+if the rest of the answer reads fluently.
+
+Write Step 1 and Step 2 briefly, then on the final line write exactly:
+SCORE: <a number between 0 and 1>
+"""
+
 class FaithfulnessSignal:
-    def __init__(self, model_name:str="cross-encoder/nli-deberta-v3-base"):
-        self.model_name=model_name
-        self._pipeline=None
-    def get_pipeline(self):         #exposes loaded nli pipeline so semantic_entropy.py can reuse it without loading deberta twice
-        self._load_model()
-        return self._pipeline
-    def _load_model(self):
-        if self._pipeline is not None:
-            return
+    def __init__(self, llm_client):
+        if llm_client is None:
+            raise ConfigurationError("FaithfulnessSignal requires an llm_client.")
+        self.llm_client=llm_client
+    def score(self,question,answer,chunks):
+        if not chunks:
+            return 0.0, "No chunks were retrieved."
+        context=""
+        for i, chunk in enumerate(chunks):
+            context+=f"[{i + 1}] {chunk}\n"
+        prompt=JUDGE_PROMPT.format(context=context, question=question, answer=answer)
         try:
-            from transformers import pipeline
-            self._pipeline=pipeline("text-classification",model=self.model_name,top_k=None)
+            outputs=self.llm_client.generate(prompt, temperature=0.0, n=1)
         except Exception as e:
-            raise ModelLoadError(
-                f"Failed to load NLI model '{self.model_name}'. "
-                f"Ensure transformers is installed and model is accessible. "
-                f"Error: {e}"
-            )
-    def _split_sentences(self,text:str)->list[str]:
-        sentences=re.split(r'(?<=[.!?])\s+', text.strip())
-        return [s.strip() for s in sentences if len(s.strip())>10]
-    def _entailment_prob(self,premise:str,hypothesis:str)->float:
-        try:
-            result=self._pipeline(f"{premise} [SEP] {hypothesis}")[0]
-            for item in result:
-                if item["label"].lower()=="entailment":
-                    return float(item["score"])
-            return 0.0
-        except Exception as e:
-            raise ComputationError(f"NLI inference failed: {e}")
-    def compute(self,answer:str,context_chunks:list[str],retrieval_scores:list[float])->dict:
-        if not answer or not answer.strip():
-            raise InputValidationError("answer cannot be empty.")
-        if not context_chunks:
-            raise InputValidationError("context_chunks cannot be empty")
-        if len(context_chunks)!=len(retrieval_scores):
-            raise InputValidationError(
-                f"context_chunks length ({len(context_chunks)}) must match retrieval_scores length ({len(retrieval_scores)})."
-            )
-        scores=[float(s) for s in retrieval_scores]
-        if sum(scores)==0:
-            raise InputValidationError("All retrieval_scores are zero. Cannot compute weighted faithfulness")
-        self._load_model()
-        sentences=self._split_sentences(answer)
-        if not sentences:
-            sentences=[answer.strip()]
-        chunk_scores=[]
-        for chunk,ret_score in zip(context_chunks,scores):
-            if not chunk or not chunk.strip():
-                continue
-            sentence_probs=[self._entailment_prob(chunk,sentence) for sentence in sentences]
-            chunk_entailment=float(np.mean(sentence_probs))
-            chunk_scores.append({
-                "chunk":chunk,
-                "entailment_prob":chunk_entailment,
-                "retrieval_score":ret_score,
-                "sentence_scores":sentence_probs
-            })
-        if not chunk_scores:
-            raise ComputationError("No valid chunks to score.")
-        
-        weights=np.array([c["retrieval_score"] for c in chunk_scores])
-        probs=np.array([c["entailment_prob"] for c in chunk_scores])
-        try:
-            weighted_score=float(np.average(probs,weights=weights))
-        except ZeroDivisionError:
-            raise ComputationError("Weighted average failed. Weights sum to zero.")
-        return{
-            "faithfulness_score": weighted_score,
-            "chunk_scores": chunk_scores,
-            "supporting_chunks": [c for c in chunk_scores if c["entailment_prob"]>0.5],
-            "contradicting_chunks": [c for c in chunk_scores if c["entailment_prob"]<0.2],
-            "sentences_evaluated": sentences
-        }
+            raise BackendError(f"Faithfulness judge call failed:{e}") from e
+        text=outputs[0].strip() if outputs else ""
+        match=SCORE_PATTERN.search(text)
+        if not match:
+            return 0.0, text
+        score=float(match.group(1))
+        score=max(0.0,min(1.0,score))
+        reasoning=SCORE_PATTERN.sub("", text).strip()
+        return score, reasoning
