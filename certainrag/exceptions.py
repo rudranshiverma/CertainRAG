@@ -1,12 +1,8 @@
 class CertainRAGError(Exception):
-    """Base exception for CertainRAG."""
     pass
-class InputValidationError(CertainRAGError):
-    """Raised when input data is invalid."""
+class ConfigurationError(CertainRAGError):
     pass
-class ModelLoadError(CertainRAGError):
-    """Raised when the required model cannot be loaded."""
+class MissingDependencyError(CertainRAGError):
     pass
-class ComputationError(CertainRAGError):
-    """Raised when uncertainty computation fails."""
+class BackendError(CertainRAGError):
     pass
