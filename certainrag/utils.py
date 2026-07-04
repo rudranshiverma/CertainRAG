@@ -41,4 +41,4 @@ def weighted_mean(values, weights):
     total=0.0
     for value, weight in zip(values, weights):
         total+=value*weight
-    return total
+    return float(total)
