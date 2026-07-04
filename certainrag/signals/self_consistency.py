@@ -10,11 +10,9 @@ class SelfConsistencySignal:
         self.temperature=temperature
         self.embedder=utils.get_embedder()
 
-    def score(self, question, prompt=None):
-        gen_prompt = prompt if prompt else question
-
+    def score(self, question):
         try:
-            samples=self.llm_client.generate(gen_prompt, temperature=self.temperature, n=self.n_samples)
+            samples=self.llm_client.generate(question, temperature=self.temperature, n=self.n_samples)
         except Exception as e:
             raise BackendError(f"Self-consistency resampling failed: {e}") from e
 
