@@ -8,10 +8,8 @@ version = "0.1.0"
 description = "Runtime uncertainty quantification for RAG pipelines"
 requires-python = ">=3.9"
 dependencies = [
-    "numpy",
-    "transformers",
-    "torch",
-    "sentence-transformers"
+    "numpy", "transformers", "torch", "sentence-transformers",
+    "faiss-cpu", "datasets", "scikit-learn", "matplotlib"
 ]
 
 [tool.setuptools.packages.find]
