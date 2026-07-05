@@ -220,7 +220,11 @@ Faithfulness is evaluated using a **contrastive paired setup**: for each questio
 | Retrieval MRR                          | 0.758          | 0.996            |
 | Faithfulness AUC                       | 0.816          | 0.821            |
 | Faithfulness accuracy @ best threshold | 0.786          | 0.787            |
-| Combined uncertainty AUC               |                |                  |
+
+
+---
+| ![SQuAD Faithfulness ROC](evaluation/outputs/squad_faithfulness_roc.png) | ![RPubmedQA Faithfulness ROC](evaluation/outputs/pubmedqa_faithfulness_roc.png) |
+| :---: | :---: |
 
 
 
