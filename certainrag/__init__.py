@@ -1,5 +1,5 @@
 from .exceptions import ConfigurationError
-from .llm_client import LLMClient, OllamaClient
+from .llm_client import LLMClient, OllamaClient, AnthropicClient, OpenAICompatibleClient
 from .scorer import CertainRAGResult, combine_scores, DEFAULT_WEIGHTS
 from .signals import (
     RetrievalConfidenceSignal,
@@ -66,4 +66,4 @@ class CertainRAG:
             self_consistency=self_consistency,
             uncertainty=uncertainty,
         )
-__all__ = ["CertainRAG", "CertainRAGResult","LLMClient", "OllamaClient"]
+__all__ = ["CertainRAG", "CertainRAGResult","LLMClient", "OllamaClient", "AnthropicClient", "OpenAICompatibleClient",]
