@@ -1,4 +1,9 @@
-from .exceptions import ConfigurationError
+from .exceptions import (
+    CertainRAGError,
+    ConfigurationError,
+    MissingDependencyError,
+    BackendError,
+)
 from .llm_client import LLMClient, OllamaClient, AnthropicClient, OpenAICompatibleClient
 from .scorer import CertainRAGResult, combine_scores, DEFAULT_WEIGHTS
 from .signals import (
@@ -66,4 +71,4 @@ class CertainRAG:
             self_consistency=self_consistency,
             uncertainty=uncertainty,
         )
-__all__ = ["CertainRAG", "CertainRAGResult","LLMClient", "OllamaClient", "AnthropicClient", "OpenAICompatibleClient",]
+__all__ = ["CertainRAG", "CertainRAGResult","LLMClient", "OllamaClient", "AnthropicClient", "OpenAICompatibleClient","CertainRAGError", "ConfigurationError", "MissingDependencyError", "BackendError"]
