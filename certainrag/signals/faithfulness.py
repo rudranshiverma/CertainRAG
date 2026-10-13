@@ -1,55 +1,77 @@
-import re
+import numpy as np
+
 from ..exceptions import BackendError, ConfigurationError
+from ..result import ClaimScore, FaithfulnessResult
+from ..utils import pack_windows, split_sentences
+from .judge import LLMJudge
+from .verifiers import Verifier
 
-SCORE_PATTERN = re.compile(r"SCORE:\s*(\d*\.?\d+)", re.IGNORECASE)
+MIN_CLAIM_WORDS = 4
+SHORT_ANSWER_WORDS = 6
+DEFAULT_ESCALATE_BAND = (0.35, 0.65)
 
-JUDGE_PROMPT = """You are checking whether an answer is faithful to its source context.
 
-Context:
-{context}
+def build_claims(question, answer):
+    sentences = split_sentences(answer)
+    if not sentences:
+        return []
+    if len(answer.split()) < SHORT_ANSWER_WORDS:
+        return [f"{question.strip()} {answer.strip()}"]
+    claims, buffer = [], ""
+    for sentence in sentences:
+        buffer = f"{buffer} {sentence}".strip()
+        if len(buffer.split()) >= MIN_CLAIM_WORDS:
+            claims.append(buffer)
+            buffer = ""
+    if buffer:
+        if claims:
+            claims[-1] = f"{claims[-1]} {buffer}"
+        else:
+            claims.append(buffer)
+    return claims
 
-Question: {question}
-
-Answer: {answer}
-
-Step 1: State the answer's core claim in one sentence (its yes/no/maybe direction and the specific facts/numbers it relies on).
-
-Step 2: Check that core claim directly against the context. Does the context support that exact direction and those exact facts, or does it support the \
-opposite, a different number, or something not mentioned at all?
-
-Step 3: Score using these anchors, based only on what Step 2 found:
-- 0.9-1.0: the core claim and its specific facts are explicitly supported by the context
-- 0.5-0.7: the core claim is a reasonable inference, but not explicitly stated
-- 0.0-0.3: the core claim, its direction, or a specific fact CONTRADICTS the context, or is fabricated and not present in the context at all
-
-Do not default to a middle score. A flipped direction (yes vs no, increases vs decreases) or a changed number is a contradiction and must score 0.0-0.3, even \
-if the rest of the answer reads fluently.
-
-Write Step 1 and Step 2 briefly, then on the final line write exactly:
-SCORE: <a number between 0 and 1>
-"""
 
 class FaithfulnessSignal:
-    def __init__(self, llm_client):
-        if llm_client is None:
-            raise ConfigurationError("FaithfulnessSignal requires an llm_client.")
-        self.llm_client=llm_client
-    def score(self,question,answer,chunks):
-        if not chunks:
-            return 0.0, "No chunks were retrieved."
-        context=""
-        for i, chunk in enumerate(chunks):
-            context+=f"[{i + 1}] {chunk}\n"
-        prompt=JUDGE_PROMPT.format(context=context, question=question, answer=answer)
+    def __init__(self, verifier="factcg", device=None, judge=None, escalate_band=DEFAULT_ESCALATE_BAND, batch_size=16):
+        low, high = escalate_band
+        if not 0.0 <= low <= high <= 1.0:
+            raise ConfigurationError("escalate_band must satisfy 0 <= low <= high <= 1.")
+        self.verifier = Verifier(verifier, device, batch_size) if isinstance(verifier, str) else verifier
+        self.judge = LLMJudge(judge) if judge is not None else None
+        self.escalate_band = escalate_band
+
+    def score(self, question, answer, chunks):
+        claims = build_claims(question, answer)
+        if not claims:
+            return FaithfulnessResult()
+        claims = self.verifier.prepare_claims(claims)
+        budget = self.verifier.window_budget(claims)
+        windows = pack_windows(split_sentences("\n".join(chunks)), self.verifier.tokenizer, budget)
+        if not windows:
+            return FaithfulnessResult(
+                score=0.0, method="verifier", verifier_score=0.0, claims=[ClaimScore(c, 0.0) for c in claims]
+            )
+        pairs = [(w, c) for c in claims for w in windows]
+        probs = np.array(self.verifier.score([w for w, _ in pairs], [c for _, c in pairs]))
+        claim_scores = probs.reshape(len(claims), len(windows)).max(axis=1)
+        verifier_score = float(claim_scores.min())
+        result = FaithfulnessResult(
+            score=verifier_score,
+            method="verifier",
+            verifier_score=verifier_score,
+            claims=[ClaimScore(c, float(s)) for c, s in zip(claims, claim_scores)],
+        )
+        low, high = self.escalate_band
+        if self.judge is None or not low <= verifier_score <= high:
+            return result
         try:
-            outputs=self.llm_client.generate(prompt, temperature=0.0, n=1)
-        except Exception as e:
-            raise BackendError(f"Faithfulness judge call failed:{e}") from e
-        text=outputs[0].strip() if outputs else ""
-        match=SCORE_PATTERN.search(text)
-        if not match:
-            return 0.0, text
-        score=float(match.group(1))
-        score=max(0.0,min(1.0,score))
-        reasoning=SCORE_PATTERN.sub("", text).strip()
-        return score, reasoning
+            judge_score, reasoning = self.judge.score(question, answer, chunks)
+        except BackendError as e:
+            result.judge_error = str(e)
+            return result
+        if judge_score is None:
+            result.judge_error = "Judge output had no valid SCORE line."
+            result.reasoning = reasoning
+            return result
+        result.score, result.method, result.reasoning = judge_score, "judge", reasoning
+        return result
