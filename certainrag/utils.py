@@ -20,7 +20,7 @@ def pack_windows(sentences, tokenizer, max_tokens):
     if not sentences:
         return []
     units = []
-    for sentence, ids in zip(sentences, tokenizer(sentences, add_special_tokens=False)["input_ids"]):
+    for sentence, ids in zip(sentences, tokenizer(sentences, add_special_tokens=False, verbose=False)["input_ids"]):
         if len(ids) <= max_tokens:
             units.append((sentence, len(ids)))
             continue
