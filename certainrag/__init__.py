@@ -1,74 +1,54 @@
-from .exceptions import (
-    CertainRAGError,
-    ConfigurationError,
-    MissingDependencyError,
-    BackendError,
-)
-from .llm_client import LLMClient, OllamaClient, AnthropicClient, OpenAICompatibleClient
-from .scorer import CertainRAGResult, combine_scores, DEFAULT_WEIGHTS
-from .signals import (
-    RetrievalConfidenceSignal,
-    FaithfulnessSignal,
-    SelfConsistencySignal,
-)
+from .exceptions import BackendError, CertainRAGError, ConfigurationError
+from .policy import Guard, GuardOutput, Policy
+from .result import CertainRAGResult, ClaimScore, Decision, FaithfulnessResult, RetrievalResult
+from .signals import VERIFIERS, FaithfulnessSignal, RetrievalSignal
+from .signals.faithfulness import DEFAULT_ESCALATE_BAND
+from .signals.retrieval_score import DEFAULT_PLATT, DEFAULT_RERANKER
+
+__version__ = "0.2.0"
+
+
 class CertainRAG:
     def __init__(
         self,
-        llm_client=None,
-        judge_llm_client=None,
-        use_self_consistency=False,
-        n_samples=3,
-        self_consistency_temperature=1.0,
-        weights=None,
+        verifier="factcg",
+        reranker=DEFAULT_RERANKER,
+        device=None,
+        judge=None,
+        escalate_band=DEFAULT_ESCALATE_BAND,
+        policy=None,
+        retrieval_platt=DEFAULT_PLATT,
     ):
-        if llm_client is None:
-            raise ConfigurationError(
-                "CertainRAG requires an llm_client (used as the faithfulness judge "
-                "unless judge_llm_client is set separately)."
-            )
-        self.llm_client=llm_client
-        self.weights=weights or DEFAULT_WEIGHTS
-        self.retrieval_signal=RetrievalConfidenceSignal()
-        self.faithfulness_signal=FaithfulnessSignal(judge_llm_client or llm_client)
-        self.use_self_consistency=use_self_consistency
-        self.self_consistency_signal=None
-        if use_self_consistency:
-            self.self_consistency_signal = SelfConsistencySignal(
-                llm_client, n_samples=n_samples, temperature=self_consistency_temperature
-            )
+        self.policy = policy or Policy()
+        self.retrieval = RetrievalSignal(reranker, device, retrieval_platt) if isinstance(reranker, str) else reranker
+        self.faithfulness = FaithfulnessSignal(verifier, device, judge, escalate_band)
 
-    def score(self, question, answer, chunks, retrieval_scores=None):
-        if not retrieval_scores:
-            raise ConfigurationError(
-                "retrieval_scores is required. Pass the similarity scores your "
-                "retriever returned alongside the chunks. These must be cosine "
-                "similarities in [0, 1], in the same order as chunks."
-            )
-        if not chunks:
-            raise ConfigurationError(
-                "chunks is required. Pass the retrieved context chunks your "
-                "retriever returned for this query."
-            )
-        retrieval_confidence=self.retrieval_signal.score(retrieval_scores)
-        faithfulness, faithfulness_reasoning=self.faithfulness_signal.score(question, answer, chunks)
-        self_consistency=None
-        if self.self_consistency_signal is not None:
-            self_consistency=self.self_consistency_signal.score(question)
+    def score_retrieval(self, question, chunks):
+        return self.retrieval.score(question, chunks)
 
-        uncertainty=combine_scores(
-            retrieval_confidence=retrieval_confidence,
-            faithfulness=faithfulness,
-            self_consistency=self_consistency,
-            weights=self.weights,
-        )
+    def score_faithfulness(self, question, answer, chunks):
+        return self.faithfulness.score(question, answer, chunks)
 
-        return CertainRAGResult(
-            question=question,
-            answer=answer,
-            retrieval_confidence=retrieval_confidence,
-            faithfulness=faithfulness,
-            faithfulness_reasoning=faithfulness_reasoning,
-            self_consistency=self_consistency,
-            uncertainty=uncertainty,
-        )
-__all__ = ["CertainRAG", "CertainRAGResult","LLMClient", "OllamaClient", "AnthropicClient", "OpenAICompatibleClient","CertainRAGError", "ConfigurationError", "MissingDependencyError", "BackendError"]
+    def score(self, question, answer, chunks):
+        retrieval = self.score_retrieval(question, chunks)
+        if not self.policy.retrieval_ok(retrieval):
+            return CertainRAGResult(Decision.INSUFFICIENT_CONTEXT, retrieval)
+        faithfulness = self.score_faithfulness(question, answer, chunks)
+        return CertainRAGResult(self.policy.decide(retrieval, faithfulness), retrieval, faithfulness)
+
+
+__all__ = [
+    "VERIFIERS",
+    "BackendError",
+    "CertainRAG",
+    "CertainRAGError",
+    "CertainRAGResult",
+    "ClaimScore",
+    "ConfigurationError",
+    "Decision",
+    "FaithfulnessResult",
+    "Guard",
+    "GuardOutput",
+    "Policy",
+    "RetrievalResult",
+]
