@@ -59,7 +59,7 @@ class FaithfulnessSignal:
             score=verifier_score,
             method="verifier",
             verifier_score=verifier_score,
-            claims=[ClaimScore(c, float(s)) for c, s in zip(claims, claim_scores)],
+            claims=[ClaimScore(c, float(s)) for c, s in zip(claims, claim_scores, strict=True)],
         )
         low, high = self.escalate_band
         if self.judge is None or not low <= verifier_score <= high:

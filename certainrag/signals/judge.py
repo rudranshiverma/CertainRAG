@@ -13,9 +13,11 @@ Question: {question}
 
 Answer: {answer}
 
-Step 1: List the factual claims the answer makes, including any direction (yes/no, increase/decrease), numbers, names and dates.
+Step 1: List the factual claims the answer makes, including any direction (yes/no, increase/decrease), numbers, \
+names and dates.
 
-Step 2: Check each claim against the context. Is it explicitly supported, a reasonable inference, contradicted, or not mentioned?
+Step 2: Check each claim against the context. Is it explicitly supported, a reasonable inference, contradicted, \
+or not mentioned?
 
 Step 3: Score the whole answer using these anchors:
 - 0.9-1.0: every claim is explicitly supported by the context

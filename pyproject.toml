@@ -1,16 +1,53 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "certainrag"
-version = "0.1.0"
-description = "Runtime uncertainty quantification for RAG pipelines"
-requires-python = ">=3.9"
+dynamic = ["version"]
+description = "Runtime retrieval-quality and faithfulness scoring for RAG pipelines"
+readme = "README.md"
+license = "MIT"
+authors = [{ name = "Rudranshi Verma" }]
+requires-python = ">=3.10"
 dependencies = [
-    "numpy", "transformers", "torch", "sentence-transformers",
-    "faiss-cpu", "datasets", "scikit-learn", "matplotlib"
+    "torch>=2.1",
+    "transformers>=4.40",
+    "sentencepiece>=0.1.99",
+    "protobuf>=4.21",
+    "pysbd>=0.3.4",
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "scikit-learn>=1.3",
 ]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Developers",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[project.optional-dependencies]
+bench = ["datasets>=2.18", "pandas>=2.0", "matplotlib>=3.7", "sentence-transformers>=2.6"]
+dev = ["pytest>=8.0", "ruff>=0.6", "build>=1.2", "twine>=5.0"]
+
+[project.urls]
+Repository = "https://github.com/rudranshiverma/CertainRAG"
+
+[tool.setuptools.dynamic]
+version = { attr = "certainrag.__version__" }
 
 [tool.setuptools.packages.find]
 include = ["certainrag*"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["slow: downloads real models"]
+addopts = "-m 'not slow'"

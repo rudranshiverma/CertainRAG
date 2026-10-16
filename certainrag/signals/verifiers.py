@@ -40,15 +40,16 @@ class Verifier:
 
     def prepare_claims(self, claims):
         limit = self.max_length - self._overhead - MIN_WINDOW_TOKENS
-        ids = self.tokenizer(claims, add_special_tokens=False)["input_ids"]
-        return [c if len(i) <= limit else self.tokenizer.decode(i[:limit]) for c, i in zip(claims, ids)]
+        ids = self.tokenizer(claims, add_special_tokens=False, verbose=False)["input_ids"]
+        return [c if len(i) <= limit else self.tokenizer.decode(i[:limit]) for c, i in zip(claims, ids, strict=True)]
 
     def window_budget(self, claims):
-        longest = max(len(i) for i in self.tokenizer(claims, add_special_tokens=False)["input_ids"])
+        ids = self.tokenizer(claims, add_special_tokens=False, verbose=False)["input_ids"]
+        longest = max(len(i) for i in ids)
         return min(WINDOW_TOKENS, self.max_length - self._overhead - longest)
 
     def score(self, windows, claims):
-        texts = [self._format(w, c) for w, c in zip(windows, claims)]
+        texts = [self._format(w, c) for w, c in zip(windows, claims, strict=True)]
         probs = []
         for i in range(0, len(texts), self.batch_size):
             batch = self.tokenizer(
