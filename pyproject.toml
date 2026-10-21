@@ -28,7 +28,7 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
-bench = ["datasets>=2.18", "pandas>=2.0", "matplotlib>=3.7", "sentence-transformers>=2.6"]
+bench = ["datasets>=2.18", "matplotlib>=3.7", "sentence-transformers>=2.6", "requests>=2.31"]
 dev = ["pytest>=8.0", "ruff>=0.6", "build>=1.2", "twine>=5.0"]
 
 [project.urls]

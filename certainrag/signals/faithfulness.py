@@ -40,20 +40,22 @@ class FaithfulnessSignal:
         self.judge = LLMJudge(judge) if judge is not None else None
         self.escalate_band = escalate_band
 
-    def score(self, question, answer, chunks):
-        claims = build_claims(question, answer)
-        if not claims:
-            return FaithfulnessResult()
+    def support_matrix(self, claims, chunks):
         claims = self.verifier.prepare_claims(claims)
         budget = self.verifier.window_budget(claims)
         windows = pack_windows(split_sentences("\n".join(chunks)), self.verifier.tokenizer, budget)
         if not windows:
-            return FaithfulnessResult(
-                score=0.0, method="verifier", verifier_score=0.0, claims=[ClaimScore(c, 0.0) for c in claims]
-            )
+            return claims, np.zeros((len(claims), 0))
         pairs = [(w, c) for c in claims for w in windows]
         probs = np.array(self.verifier.score([w for w, _ in pairs], [c for _, c in pairs]))
-        claim_scores = probs.reshape(len(claims), len(windows)).max(axis=1)
+        return claims, probs.reshape(len(claims), len(windows))
+
+    def score(self, question, answer, chunks):
+        claims = build_claims(question, answer)
+        if not claims:
+            return FaithfulnessResult()
+        claims, matrix = self.support_matrix(claims, chunks)
+        claim_scores = matrix.max(axis=1) if matrix.size else np.zeros(len(claims))
         verifier_score = float(claim_scores.min())
         result = FaithfulnessResult(
             score=verifier_score,

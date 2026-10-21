@@ -171,3 +171,11 @@ def test_verifier_inputs_fit(tiny_factcg):
 def test_unknown_verifier():
     with pytest.raises(ConfigurationError):
         Verifier("nope")
+
+
+def test_support_matrix_matches_score(fake_verifier):
+    signal = FaithfulnessSignal(fake_verifier)
+    claims, matrix = signal.support_matrix(build_claims("q?", ONE_WRONG), CHUNKS)
+    assert matrix.shape[0] == len(claims) == 2
+    assert matrix.max(axis=1).min() == signal.score("q?", ONE_WRONG, CHUNKS).score
+    assert signal.support_matrix(claims, [])[1].shape == (2, 0)
