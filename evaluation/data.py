@@ -92,12 +92,13 @@ def ragbench(subset, split, limit=None, seed=0):
 
 
 def ragbench_retrieval(subset, split, limit=None, seed=0):
-    queries = []
+    queries, skipped = [], 0
     for r in _ragbench(subset, split):
         documents = list(r["documents"])
         relevant = {int(re.match(r"\d+", key).group()) for key in r["all_relevant_sentence_keys"]}
         if not relevant <= set(range(len(documents))):
-            raise ValueError(f"{r['id']}: relevance key outside {len(documents)} documents")
+            skipped += 1
+            continue
         queries.append(
             {
                 "id": r["id"],
@@ -107,6 +108,8 @@ def ragbench_retrieval(subset, split, limit=None, seed=0):
                 "relevant": [int(i in relevant) for i in range(len(documents))],
             }
         )
+    if skipped:
+        print(f"ragbench-{subset} {split}: skipped {skipped} rows whose relevance keys point outside their documents")
     return _sample(queries, limit, seed)
 
 

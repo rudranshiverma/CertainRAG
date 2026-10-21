@@ -69,6 +69,7 @@ def main():
     parser.add_argument("--splits", nargs="+", default=list(LIMITS))
     parser.add_argument("--subsets", nargs="+", default=data.RAGBENCH_SUBSETS)
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    parser.add_argument("--deadline", type=float, default=None, help="unix time after which to stop")
     args = parser.parse_args()
 
     scorers = Scorers(args.device)
@@ -84,6 +85,9 @@ def main():
         print(f"{path}: {len(done)} cached, {len(todo)} to run")
         with open(path, "a") as f:
             for q in todo:
+                if args.deadline and time.time() > args.deadline:
+                    print("deadline reached")
+                    return
                 row = {k: q[k] for k in ("id", "group", "kind", "relevant")}
                 f.write(json.dumps({**row, **scorers(q)}) + "\n")
                 f.flush()

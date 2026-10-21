@@ -82,7 +82,7 @@ def method_name(args):
     return f"judge-{args.judge_model.replace(':', '-')}" if args.method == "judge" else args.method
 
 
-def run(method, records, path):
+def run(method, records, path, deadline=None):
     path.parent.mkdir(parents=True, exist_ok=True)
     done = set()
     if path.exists():
@@ -92,6 +92,9 @@ def run(method, records, path):
     print(f"{path}: {len(done)} cached, {len(todo)} to run")
     with open(path, "a") as f:
         for i, record in enumerate(todo, 1):
+            if deadline and time.time() > deadline:
+                print(f"  deadline reached after {i - 1}/{len(todo)}")
+                return False
             start = time.perf_counter()
             try:
                 out = method(record)
@@ -106,6 +109,7 @@ def run(method, records, path):
             f.flush()
             if i % 100 == 0:
                 print(f"  {i}/{len(todo)}")
+    return True
 
 
 def main():
@@ -119,6 +123,7 @@ def main():
     parser.add_argument("--judge-model", default="phi4-mini")
     parser.add_argument("--ollama-host", default="http://localhost:11434")
     parser.add_argument("--num-ctx", type=int, default=16384)
+    parser.add_argument("--deadline", type=float, default=None, help="unix time after which to stop")
     args = parser.parse_args()
 
     method = build_method(args)
@@ -126,7 +131,9 @@ def main():
         for split in args.splits:
             limit = args.dev_limit if split == "dev" else args.limit
             records = data.load(dataset, split, limit=limit or None)
-            run(method, records, RESULTS_DIR / method_name(args) / f"{dataset}_{split}.jsonl")
+            path = RESULTS_DIR / method_name(args) / f"{dataset}_{split}.jsonl"
+            if not run(method, records, path, args.deadline):
+                return
 
 
 if __name__ == "__main__":
