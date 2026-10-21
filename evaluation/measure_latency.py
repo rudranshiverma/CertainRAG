@@ -8,7 +8,7 @@ from pathlib import Path
 
 import torch
 
-from certainrag.signals import VERIFIERS, FaithfulnessSignal, RetrievalSignal
+from certainrag.signals import VERIFIERS, FaithfulnessSignal, RetrievalSignal, Verifier
 
 RAGTRUTH_URL = "https://raw.githubusercontent.com/ParticleMedia/RAGTruth/main/dataset/{}"
 WARMUP = 3
@@ -63,6 +63,7 @@ def main():
     parser.add_argument("--n", type=int, default=30)
     parser.add_argument("--device", default=None)
     parser.add_argument("--threads", type=int, default=None)
+    parser.add_argument("--fp32", action="store_true")
     parser.add_argument("--verifiers", nargs="+", default=list(VERIFIERS))
     parser.add_argument("--cache-dir", default="evaluation/results/ragtruth")
     parser.add_argument("--out", default=None)
@@ -73,24 +74,27 @@ def main():
     queries = load_queries(args.n, args.cache_dir)
 
     retrieval = RetrievalSignal(device=device)
+    precision = "fp32" if args.fp32 or device == "cpu" else "fp16"
     report = {
         "device": torch.cuda.get_device_name() if device == "cuda" else f"cpu ({torch.get_num_threads()} threads)",
+        "precision": precision,
         "queries": len(queries) - WARMUP,
         "retrieval": measure(lambda q, a, c: retrieval.score(q, c), queries),
     }
     for name in args.verifiers:
-        signal = FaithfulnessSignal(verifier=name, device=device)
+        dtype = torch.float32 if args.fp32 else None
+        signal = FaithfulnessSignal(verifier=Verifier(name, device=device, dtype=dtype))
         report[name] = measure(signal.score, queries)
         del signal
         if device == "cuda":
             torch.cuda.empty_cache()
 
-    print(f"{report['device']}, {report['queries']} RAGTruth QA queries, seconds per query")
+    print(f"{report['device']} {precision}, {report['queries']} RAGTruth QA queries, seconds per query")
     print(f"{'stage':<20}{'p50':>8}{'p95':>8}{'mean':>8}")
     for stage, stats in report.items():
         if isinstance(stats, dict):
             print(f"{stage:<20}{stats['p50']:>8.3f}{stats['p95']:>8.3f}{stats['mean']:>8.3f}")
-    out = Path(args.out or f"evaluation/results/latency_{device}.json")
+    out = Path(args.out or f"evaluation/results/latency_{device}_{precision}.json")
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, indent=1))
     print(f"wrote {out}")

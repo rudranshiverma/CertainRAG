@@ -19,16 +19,17 @@ MARGIN_TOKENS = 8
 
 
 class Verifier:
-    def __init__(self, name="factcg", device=None, batch_size=16):
+    def __init__(self, name="factcg", device=None, batch_size=16, dtype=None):
         if name not in VERIFIERS:
             raise ConfigurationError(f"Unknown verifier '{name}'. Choose from: {', '.join(VERIFIERS)}")
         checkpoint, style, self.max_length = VERIFIERS[name]
         self.name = name
         self.batch_size = batch_size
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+        self.dtype = dtype or (torch.float16 if str(self.device).startswith("cuda") else torch.float32)
         self.tokenizer = AutoTokenizer.from_pretrained(checkpoint)
         self.model = AutoModelForSequenceClassification.from_pretrained(checkpoint, num_labels=2)
-        self.model.to(self.device).eval()
+        self.model.to(device=self.device, dtype=self.dtype).eval()
         if style == "factcg":
             # FactCG was trained with eos as the padding token
             self.tokenizer.pad_token = self.tokenizer.eos_token
